@@ -41,6 +41,10 @@ os.environ['PROJ_LIB'] = result.stdout.replace('\n','').replace('gdal','proj') #
 gdal.UseExceptions()  # this allows GDAL to throw Python Exceptions
 num_workers = int(cpu_count() - (cpu_count() * 0.20)) # using about 80% of cores
 
+# Check version of GDAL with driver that supports the creation of Cloud Optimized GeoTIFF (COG) (Added in version 3.1):
+if not tuple([int(i) for i in gdal.__version__.split('.')]) >= (3,1):
+    raise RuntimeError('GDAL version requirement for support COG creation is >= 3.1 version installed:{}'.format(gdal.__version__))
+
 
 # --------------------------
 #        Functions
@@ -206,17 +210,17 @@ def crop_mosaic_by_polygon(file_in,file_out,threshold_area):
     roi_area_dissolved_buffered_negative = roi_area_dissolved.buffer(-1. *  ((roi_area_dissolved['geometry'].area * threshold_area) / 100.), resolution=5,single_sided=True)
 
     # Save a convex hull from the negative buffer to avoid a final crop with serrated edges:
-    fd, path_shp2 = tempfile.mkstemp(suffix='.shp')  # Create temporary file
-    os.close(fd) 
-    roi_area_dissolved_buffered_negative.convex_hull.to_file(path_shp2)
+    with tempfile.TemporaryDirectory() as tmp:
+        path_shp2 = os.path.join(tmp, prefix+'_convex_hull.shp') 
+        roi_area_dissolved_buffered_negative.convex_hull.to_file(path_shp2)
 
-    print('Cropping the mosaic with a convex hull around the buffered area of interest...')    
-    block_size_output = 256 #Sets the tile width and height in pixels. Must be divisible by 16. https://gdal.org/drivers/raster/cog.html#general-creation-options
-    dst_output = gdal.Warp(file_out,file_in, 
-                         options="-overwrite -multi -wm 80%  -of COG -r NEAREST -cutline {} -crop_to_cutline -co BIGTIFF=YES -co BLOCKSIZE={}" \
-                             " -co COMPRESS=DEFLATE -wo OPTIMIZE_SIZE=TRUE -co NUM_THREADS={}".format(path_shp2,str(block_size_output),str(num_workers)))
-    os.remove(path_shp2) #remove temporary file
-    print('\nCrop file created at:\n',file_out)    
+        print('Cropping the mosaic with a convex hull around the buffered area of interest...')    
+        block_size_output = 256 #Sets the tile width and height in pixels. Must be divisible by 16. https://gdal.org/drivers/raster/cog.html#general-creation-options
+        dst_output = gdal.Warp(file_out,file_in, 
+                            options="-overwrite -multi -wm 80%  -of COG -cutline {} -crop_to_cutline -co BIGTIFF=YES -co BLOCKSIZE={}" \
+                                " -co COMPRESS=DEFLATE -wo OPTIMIZE_SIZE=TRUE -co NUM_THREADS={}".format(path_shp2,str(block_size_output),str(num_workers)))
+        if os.path.exists(file_out):
+            print('\nCrop file created at:\n',file_out)    
 
 
 def main(argv):
