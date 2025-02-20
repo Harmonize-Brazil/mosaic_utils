@@ -53,12 +53,13 @@ Build Steps
 Ensure you have GDAL installed on the host (``Linux``):
 ------------------------------------------------------
 
-Using a Makefile:
+Using a Makefile, run this command at the terminal:
 
 .. code-block:: shell
+
         make
 
-Or make step-by-step typing the commands below:
+Or make step-by-step typing these commands below:
 
 .. code-block:: shell
 
