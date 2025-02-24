@@ -35,9 +35,6 @@ import sys
 import tempfile
 
 """ Settings """
-result = subprocess.run(['gdal-config','--datadir'], capture_output=True, text=True)
-os.environ['GDAL_DATA'] = result.stdout.replace('\n','') #set gdal data path
-os.environ['PROJ_LIB'] = result.stdout.replace('\n','').replace('gdal','proj') #set proj path
 gdal.UseExceptions()  # this allows GDAL to throw Python Exceptions
 num_workers = int(cpu_count() - (cpu_count() * 0.20)) # using about 80% of cores
 
