@@ -18,11 +18,6 @@ mosaic_utils
         :alt: Software Life Cycle
 
 
-.. image:: https://img.shields.io/github/tag/Harmonize-Brazil/scripts_drone.svg
-        :target: https://github.com/Harmonize-Brazil/scripts_drone/releases/latest
-        :alt: Release
-
-
 About
 =====
 
@@ -34,7 +29,7 @@ Installation
 
 **Dependencies**
 
-    Python 3.12.1, Geopandas and GDAL
+    Python 3.12.9, Geopandas and GDAL
 
 Build Steps
 -----------
@@ -46,46 +41,27 @@ Build Steps
         git https://github.com/Harmonize-Brazil/mosaic_utils.git
         cd mosaic_utils
         python -m venv venv
-        source venv/bin/activate
+        venv\Scripts\activate.bat
         pip3 install --upgrade pip setuptools wheel
+        pip3 install numpy
 
 
-Ensure you have GDAL installed on the host (``Linux``):
+Ensure you have GDAL installed on the host (``Windows``):
 ------------------------------------------------------
 
-Using a Makefile, run this command at the terminal:
+Make sure you have created a virtual environment and have activated it before starting the next steps:
+
+1. Download a ``.whl`` file for the GDAL library from `here <https://github.com/cgohlke/geospatial-wheels/releases>`_. Go to ``Assets`` and choose the wheel file 
+by name e.g. (GDAL-3.4.3-cp312-cp312-win_amd64.whl) explanation GDAL-VERSION-PYTHON_VERSION-PYTHON_VERSION-OS-ARCHITECTURE.
+2. Install using the command below:
 
 .. code-block:: shell
 
-        make
+        pip3 install GDAL-3.4.3-cp312-cp312-win_amd64.whl
 
-Or make step-by-step typing these commands below:
 
-.. code-block:: shell
 
-        sudo apt-get update && sudo apt-get upgrade
-        sudo apt-get install -y g++ && sudo apt-get install -y libgdal-dev gdal-bin python3-gdal
-        sudo apt-get install build-essential ##This one solves some bugs sometimes
-        pip3 install "numpy<2.0"
-        export CPLUS_INCLUDE_PATH=/usr/include/gdal
-        export C_INCLUDE_PATH=/usr/include/gdal
-        pip3 install GDAL==`gdal-config --version`
-        python -c "from osgeo import gdal; print(gdal.__version__)"
-
-Problems with GDAL import, please see these `related issues and solutions <ISSUES.rst>`_!
-
-.. tip::
-
-   For ``Windows`` users, make sure you have created a virtual environment and have activated it before starting the next steps:
-
-   #. Download a .whl file for the GDAL library, and install using that file. Select the desired version `here <https://www.lfd.uci.edu/~gohlke/pythonlibs/#gdal>`_.
-   #. The command to install is pip install <path_to_whl_file>.
-
-   Source:
-                                                                                                                
-   https://medium.com/@spatsel.cci/using-gdal-with-python-pip-and-windows-10-618d773d8926
-
-   Alternative:
+Alternative:
                                                                                                                 
    * https://pypi.org/project/GDAL
    
