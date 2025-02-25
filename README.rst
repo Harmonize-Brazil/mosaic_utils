@@ -42,8 +42,6 @@ Build Steps
         cd mosaic_utils
         python -m venv venv
         venv\Scripts\activate.bat
-        pip3 install --upgrade pip setuptools wheel
-        pip3 install numpy
 
 
 Ensure you have GDAL installed on the host (``Windows``):
@@ -51,9 +49,16 @@ Ensure you have GDAL installed on the host (``Windows``):
 
 Make sure you have created a virtual environment and have activated it before starting the next steps:
 
-1. Download a ``.whl`` file for the GDAL library from `here <https://github.com/cgohlke/geospatial-wheels/releases>`_. Go to ``Assets`` and choose the wheel file 
-by name e.g. (GDAL-3.4.3-cp312-cp312-win_amd64.whl) explanation GDAL-VERSION-PYTHON_VERSION-PYTHON_VERSION-OS-ARCHITECTURE.
-2. Install using the command below:
+1. In order to enable numpy-based raster support, libgdal and its development headers must be installed as well as the Python packages numpy, setuptools, and wheel. 
+To install the Python dependencies and build numpy-based raster support:
+
+.. code-block:: shell
+
+        pip3 install --upgrade pip setuptools wheel
+        pip3 install numpy
+2. Download a ``.whl`` file for the GDAL library from `here <https://github.com/cgohlke/geospatial-wheels/releases>`_ (unofficial binary wheels for some geospatial libraries for Python on Windows). Go to ``Assets`` and 
+choose the wheel file by name e.g. (GDAL-3.4.3-cp312-cp312-win_amd64.whl) explanation GDAL-VERSION-PYTHON_VERSION-PYTHON_VERSION-OS-ARCHITECTURE.
+Install using the command below:
 
 .. code-block:: shell
 
@@ -61,7 +66,7 @@ by name e.g. (GDAL-3.4.3-cp312-cp312-win_amd64.whl) explanation GDAL-VERSION-PYT
 
 
 
-Alternative:
+Alternative - Using official package available at Pypi (Due to the **complex** nature of GDAL and its components, different bindings may require additional packages and installation steps):
                                                                                                                 
    * https://pypi.org/project/GDAL
    
