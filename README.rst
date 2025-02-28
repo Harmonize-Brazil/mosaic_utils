@@ -34,12 +34,13 @@ Installation
 Build Steps
 -----------
 
-**Clone repository and create Virtual Environment**:
+**Using a terminal with Git support at Windows (e.g. Git CMD), clone the repository and create the virtual environment with the commands below**:
 
 .. code-block:: shell
 
         git https://github.com/Harmonize-Brazil/mosaic_utils.git
         cd mosaic_utils
+        git switch windows
         python -m venv venv
         venv\Scripts\activate.bat
 
@@ -54,7 +55,7 @@ To install the Python dependencies and build numpy-based raster support:
 
 .. code-block:: shell
 
-        pip3 install --upgrade pip setuptools wheel
+        python -m pip install --upgrade pip setuptools whell
         pip3 install numpy
 2. Download a ``.whl`` file for the GDAL library from `here <https://github.com/cgohlke/geospatial-wheels/releases>`_ (unofficial binary wheels for some geospatial libraries for Python on Windows). Go to ``Assets`` and 
 choose the wheel file by name e.g. (GDAL-3.4.3-cp312-cp312-win_amd64.whl) explanation GDAL-VERSION-PYTHON_VERSION-PYTHON_VERSION-OS-ARCHITECTURE.
