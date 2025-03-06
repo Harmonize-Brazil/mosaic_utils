@@ -34,7 +34,7 @@ Installation
 Build Steps
 -----------
 
-**Using a terminal with Git support at Windows (e.g. Git CMD), clone the repository and create the virtual environment with the commands below**:
+**Using a terminal with Git support at Windows (e.g. Git CMD)** [#]_ **, clone the repository and create the virtual environment with the commands below**:
 
 .. code-block:: shell
 
@@ -43,6 +43,8 @@ Build Steps
         git switch windows
         python -m venv venv
         venv\Scripts\activate.bat
+
+.. [#] See the guide how to install Git in Windows `here <https://github.com/git-guides/install-git#install-git-on-windows>`_.
 
 
 Ensure you have GDAL installed on the host (``Windows``):
