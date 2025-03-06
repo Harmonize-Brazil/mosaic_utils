@@ -47,8 +47,7 @@ Build Steps
 .. [#] See the guide how to install Git in Windows using an installer `here <https://github.com/git-guides/install-git#install-git-on-windows>`_.
 
 
-Ensure you have GDAL installed on the host (``Windows``):
-------------------------------------------------------
+**Ensure you have GDAL installed on the host (``Windows``)**:
 
 Make sure you have created a virtual environment and have activated it before starting the next steps:
 
@@ -60,9 +59,10 @@ To install the Python dependencies and build numpy-based raster support:
         python -m pip install --upgrade pip 
         pip3 install --upgrade setuptools wheel
         pip3 install "numpy<2.0"
-2. Download a ``.whl`` file for the GDAL library from `here <https://github.com/cgohlke/geospatial-wheels/releases>`_ (unofficial binary wheels for some geospatial libraries for Python on Windows). Go to ``Assets`` and 
-choose the wheel file by name e.g. (GDAL-3.4.3-cp312-cp312-win_amd64.whl) explanation GDAL-VERSION-PYTHON_VERSION-PYTHON_VERSION-OS-ARCHITECTURE.
-Install using the command below:
+
+2. Download a ``.whl`` file for the GDAL library from `here <https://github.com/cgohlke/geospatial-wheels/releases>`_ (unofficial binary wheels for some geospatial libraries for Python on Windows) or use alternative way based on official package available at Pypi [#]_ (complex process to create bindings using compilation in C++).
+    * 2.1 At Github page of geospatial-wheels, go to ``Assets`` and choose the wheel file by name e.g. (GDAL-3.4.3-cp312-cp312-win_amd64.whl). The name of file refers on GDAL-VERSION-PYTHON_VERSION-PYTHON_VERSION-OS-ARCHITECTURE.    
+    * 2.2 After download, install GDAL using the command below:
 
 .. code-block:: shell
 
@@ -70,7 +70,7 @@ Install using the command below:
 
 
 
-Alternative - Using official package available at Pypi (Due to the **complex** nature of GDAL and its components, different bindings may require additional packages and installation steps):
+.. [#] Alternative - Using official package available at Pypi (Due to the **complex** nature of GDAL and its components, different bindings may require additional packages and installation steps):
                                                                                                                 
    * https://pypi.org/project/GDAL
    
