@@ -70,7 +70,7 @@ Or make step-by-step typing these commands below:
         export CPLUS_INCLUDE_PATH=/usr/include/gdal
         export C_INCLUDE_PATH=/usr/include/gdal
         pip3 install GDAL==`gdal-config --version`
-        python -c "from osgeo import gdal; print(gdal.__version__)"
+        python -c "from osgeo import gdal, gdal_array ; print(gdal.__version__)"
 
 Problems with GDAL import, please see these `related issues and solutions <ISSUES.rst>`_!
 
