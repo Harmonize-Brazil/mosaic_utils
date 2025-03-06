@@ -47,7 +47,7 @@ Build Steps
 .. [#] See the guide how to install Git in Windows using an installer `here <https://github.com/git-guides/install-git#install-git-on-windows>`_.
 
 
-**Ensure you have GDAL installed on the host (``Windows``)**:
+**Ensure you have GDAL installed on the host** (``Windows``):
 
 Make sure you have created a virtual environment and have activated it before starting the next steps:
 
@@ -67,6 +67,12 @@ To install the Python dependencies and build numpy-based raster support:
 .. code-block:: shell
 
         pip3 install GDAL-3.4.3-cp312-cp312-win_amd64.whl
+
+3. Verify that numpy-based raster support for GDAL has been installed with:
+
+.. code-block:: shell
+
+        python -c "from osgeo import gdal, gdal_array ; print(gdal.__version__)"
 
 
 
