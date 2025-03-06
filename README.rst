@@ -38,7 +38,7 @@ Build Steps
 
 .. code-block:: shell
 
-        git https://github.com/Harmonize-Brazil/mosaic_utils.git
+        git clone https://github.com/Harmonize-Brazil/mosaic_utils.git
         cd mosaic_utils
         git switch windows
         python -m venv venv
