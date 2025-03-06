@@ -59,7 +59,7 @@ To install the Python dependencies and build numpy-based raster support:
 
         python -m pip install --upgrade pip 
         pip3 install --upgrade setuptools wheel
-        pip3 install numpy
+        pip3 install "numpy<2.0"
 2. Download a ``.whl`` file for the GDAL library from `here <https://github.com/cgohlke/geospatial-wheels/releases>`_ (unofficial binary wheels for some geospatial libraries for Python on Windows). Go to ``Assets`` and 
 choose the wheel file by name e.g. (GDAL-3.4.3-cp312-cp312-win_amd64.whl) explanation GDAL-VERSION-PYTHON_VERSION-PYTHON_VERSION-OS-ARCHITECTURE.
 Install using the command below:
