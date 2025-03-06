@@ -44,7 +44,7 @@ Build Steps
         python -m venv venv
         venv\Scripts\activate.bat
 
-.. [#] See the guide how to install Git in Windows `here <https://github.com/git-guides/install-git#install-git-on-windows>`_.
+.. [#] See the guide how to install Git in Windows using an installer `here <https://github.com/git-guides/install-git#install-git-on-windows>`_.
 
 
 Ensure you have GDAL installed on the host (``Windows``):
