@@ -29,7 +29,7 @@ About
 This repository provides a set of scripts to process GeoTiFF (mosaics) from drones images. 
 
   
-Installation
+Installation (For Windows `click here <https://github.com/Harmonize-Brazil/mosaic_utils/tree/windows>`_)
 ============
 
 **Dependencies**
@@ -73,22 +73,6 @@ Or make step-by-step typing these commands below:
         python -c "from osgeo import gdal, gdal_array ; print(gdal.__version__)"
 
 Problems with GDAL import, please see these `related issues and solutions <ISSUES.rst>`_!
-
-.. tip::
-
-   For ``Windows`` users, make sure you have created a virtual environment and have activated it before starting the next steps:
-
-   #. Download a .whl file for the GDAL library, and install using that file. Select the desired version `here <https://www.lfd.uci.edu/~gohlke/pythonlibs/#gdal>`_.
-   #. The command to install is pip install <path_to_whl_file>.
-
-   Source:
-                                                                                                                
-   https://medium.com/@spatsel.cci/using-gdal-with-python-pip-and-windows-10-618d773d8926
-
-   Alternative:
-                                                                                                                
-   * https://pypi.org/project/GDAL
-   
 
 
 **Install dependencies and requirements**:
