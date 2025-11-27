@@ -127,6 +127,81 @@ def close_holes(geom):
     if isinstance(geom, Polygon):
         return remove_interiors(geom)
 
+def define_roi(file_in):
+    """
+    Create the Region Of Interest (ROI), delimited by pixel valid values.
+
+    Arguments
+    ---------
+    file_in: str
+        Input filename of mosaic to delimit the ROI 
+
+    Returns
+    ---------
+    roi_area_dissolved: geopandas.DataFrame
+        Object with a polygon delimiting the ROI 
+    """
+    src_ds = gdal.Open(str(file_in), gdal.GA_ReadOnly)
+
+    driver = gdal.GetDriverByName('MEM') #To avoid error of overview creation
+    dst_ds = driver.Create('', xsize=src_ds.RasterXSize, ysize=src_ds.RasterYSize,
+                        bands=1, eType=gdal.GDT_Byte)
+    
+
+    # Set projection using source file
+    dst_ds.SetGeoTransform(src_ds.GetGeoTransform())
+    dst_ds.SetProjection(src_ds.GetProjection())
+       
+    print('Reading RGB mosaic...')
+    arr = src_ds.ReadAsArray()
+    arr = arr[0:3,...] #keep only RGB
+    nodata = src_ds.GetRasterBand(1).GetNoDataValue()    
+    if nodata == None:
+        nodata = int(arr[0,0,0])
+
+    arr_out = np.ones([arr.shape[1],arr.shape[2]], dtype=np.int8)
+    print('Delimiting the area with valid pixels...')
+    arr_out[(arr[0,...] == nodata) & (arr[1,...] == nodata) & (arr[2,...] == nodata)] = 0
+    del arr
+
+    # Create a band with mask of valid pixels    
+    band = dst_ds.GetRasterBand(1)
+    band.WriteArray(arr_out)
+    band.SetNoDataValue(nodata)
+    band.FlushCache()
+    del arr_out
+   
+    #  Create shapefile with polygon delimiting the ROI
+    prefix = os.path.splitext(os.path.basename(file_in))[0]
+    with tempfile.TemporaryDirectory() as tmp:
+        path_shp = os.path.join(tmp, prefix+'.shp')
+        dst_layername = "PolyFtr"
+        drv = ogr.GetDriverByName("ESRI Shapefile")
+        dst_shp_ds = drv.CreateDataSource(path_shp)
+        srs = osr.SpatialReference()
+        srs.ImportFromWkt(src_ds.GetProjection()) 
+        dst_layer = dst_shp_ds.CreateLayer(dst_layername, srs = srs)
+        print('Creating polygon for delimited area...')
+        gdal.Polygonize(srcBand=band, maskBand=band, outLayer=dst_layer, iPixValField=-1, options=[], callback=None)
+        dst_shp_ds.Destroy()         
+        
+        # Read the polygon of ROI
+        roi_area = gpd.read_file(path_shp)
+        roi_area['id'] = 'valid'
+        roi_area_dissolved =  roi_area.dissolve(by='id')
+        del roi_area
+
+        # Once we're done, close properly the dataset
+        src_ds.FlushCache()
+        del src_ds
+        dst_ds.FlushCache()
+        del dst_ds
+
+    # Remove inner lines    
+    roi_area_dissolved.geometry = roi_area_dissolved.geometry.apply(lambda p: close_holes(p))
+
+    return roi_area_dissolved
+   
 
 def crop_mosaic_by_polygon(file_in,file_out,threshold_area):
     """
@@ -145,82 +220,46 @@ def crop_mosaic_by_polygon(file_in,file_out,threshold_area):
     ---------
     None
     """
-
-    src_ds = gdal.Open(str(file_in), gdal.GA_ReadOnly)
-
-    driver = gdal.GetDriverByName('MEM') #To avoid error of overview creation
-    dst_ds = driver.Create('', xsize=src_ds.RasterXSize, ysize=src_ds.RasterYSize,
-                        bands=1, eType=gdal.GDT_Byte)
-
-    # Set projection using source file
-    dst_ds.SetGeoTransform(src_ds.GetGeoTransform())
-    dst_ds.SetProjection(src_ds.GetProjection())
-       
-    print('Reading mosaic...')
-    arr = src_ds.ReadAsArray()
-    arr = arr[0:3,...] #keep only RGB
-    nodata = src_ds.GetRasterBand(1).GetNoDataValue()    
-    if nodata == None:
-        nodata = int(arr[0,0,0])
-
-    arr_out = np.ones([arr.shape[1],arr.shape[2]])
-    print('Delimiting the area with valid pixels...')
-    arr_out[(arr[0,...] == nodata) & (arr[1,...] == nodata) & (arr[2,...] == nodata)] = 0
-    del arr
-
-    # Create a band with mask of valid pixels    
-    band = dst_ds.GetRasterBand(1)
-    band.WriteArray(arr_out)
-    band.SetNoDataValue(nodata)
-    band.FlushCache()
-    del arr_out
-
-    #  Create shapefile with polygon delimiting the ROI
     prefix = os.path.splitext(os.path.basename(file_in))[0]
-    with tempfile.TemporaryDirectory() as tmp:
-        path_shp = os.path.join(tmp, prefix+'.shp')
-        dst_layername = "PolyFtr"
-        drv = ogr.GetDriverByName("ESRI Shapefile")
-        dst_shp_ds = drv.CreateDataSource(path_shp)
-        srs = osr.SpatialReference()
-        srs.ImportFromWkt(src_ds.GetProjection()) 
-        dst_layer = dst_shp_ds.CreateLayer(dst_layername, srs = srs)
-        print('Creating polygon for delimited area...')
-        gdal.Polygonize(band, band, dst_layer, -1, ['-overwrite'], callback=None)
-        dst_shp_ds.Destroy()        
-        
-        # Once we're done, close properly the dataset
-        src_ds.FlushCache()
-        del src_ds
-        dst_ds.FlushCache()
-        del dst_ds
-        
-        # Read the polygon of ROI
-        roi_area = gpd.read_file(path_shp)
-        roi_area['id'] = 'valid'
-        roi_area_dissolved =  roi_area.dissolve(by='id')
-        del roi_area
-
-    # Remove inner lines    
-    roi_area_dissolved.geometry = roi_area_dissolved.geometry.apply(lambda p: close_holes(p))
-    roi_area_dissolved = roi_area_dissolved.to_crs('EPSG:3395') #to CRS in meters
-
+    roi_area = define_roi(file_in)
+    
     # Create negative buffer to remove deformed borders of image using a threshold based on percentage of ROI in meters:
     # Details about buffer method http://shapely.readthedocs.io/en/latest/manual.html#object.buffer
-    roi_area_dissolved_buffered_negative = roi_area_dissolved.buffer(-1. *  ((roi_area_dissolved['geometry'].area * threshold_area) / 100.), resolution=5,single_sided=True)
+    roi_area = roi_area.to_crs('EPSG:3395') #to CRS in meters
+    roi_area_buffered_negative = roi_area.buffer(-1. *  ((max(roi_area['geometry'].area) * threshold_area) / 100.), resolution=5,single_sided=True)
 
-    # Save a convex hull from the negative buffer to avoid a final crop with serrated edges:
     with tempfile.TemporaryDirectory() as tmp:
-        path_shp2 = os.path.join(tmp, prefix+'_convex_hull.shp') 
-        roi_area_dissolved_buffered_negative.convex_hull.to_file(path_shp2)
+        # Save negative buffer to avoid a final crop with recesses areas:
+        path_shp = os.path.join(tmp, prefix+'_negative_buffer.shp') 
+        roi_area_buffered_negative.to_file(path_shp)
 
-        print('Cropping the mosaic with a convex hull around the buffered area of interest...')    
+        print('Cropping the mosaic with a negative buffer from the delimited area...') 
+        file_out_tmp = os.path.join(os.path.dirname(file_in), prefix+'_tmp.tif')
+        
+        dst_output = gdal.Warp(file_out_tmp,file_in, 
+                            options="-overwrite -multi -wm 80%  -of COG -cutline {} -crop_to_cutline -co BIGTIFF=YES" \
+                                " -wo OPTIMIZE_SIZE=TRUE -co NUM_THREADS={}".format(path_shp,str(num_workers)))    
+
+    roi_area = define_roi(file_out_tmp)
+    # Create negative buffer to remove recesses areas of image based on threshold_area of 0.001 of ROI in meters:
+    # Details about buffer method http://shapely.readthedocs.io/en/latest/manual.html#object.buffer
+    roi_area = roi_area.to_crs('EPSG:3395') #to CRS in meters
+    roi_area_buffered_negative = roi_area.buffer(-1. *  ((max(roi_area['geometry'].area) *  0.001) / 100.), resolution=5,single_sided=True)
+
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # Save a convex hull from the negative buffer to avoid a final crop with serrated edges:        
+        path_shp = os.path.join(tmp, prefix+'_convex_hull.shp') 
+        roi_area_buffered_negative.convex_hull.to_file(path_shp)
+
+        print('Cropping the mosaic with a convex hull from the buffer that delimited the area...')  
         block_size_output = 256 #Sets the tile width and height in pixels. Must be divisible by 16. https://gdal.org/drivers/raster/cog.html#general-creation-options
-        dst_output = gdal.Warp(file_out,file_in, 
+        dst_output = gdal.Warp(file_out,file_out_tmp, 
                             options="-overwrite -multi -wm 80%  -of COG -cutline {} -crop_to_cutline -co BIGTIFF=YES -co BLOCKSIZE={}" \
-                                " -co COMPRESS=DEFLATE -wo OPTIMIZE_SIZE=TRUE -co NUM_THREADS={}".format(path_shp2,str(block_size_output),str(num_workers)))
+                                " -co COMPRESS=DEFLATE -wo OPTIMIZE_SIZE=TRUE -co NUM_THREADS={}".format(path_shp,str(block_size_output),str(num_workers)))
         if os.path.exists(file_out):
-            print('\nCrop file created at:\n',file_out)    
+            print('\nCrop file created at:\n',file_out)
+    os.remove(file_out_tmp) #remove temporary file       
 
 
 def main(argv):
