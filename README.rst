@@ -1,15 +1,31 @@
-=====================================
-mosaic_utils 
-=====================================
+..
+    This file is part of Python mosaic_utils tool.
+    Copyright (C) 2025 HARMONIZE/INPE.
 
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
+
+=====================================
+mosaic_utils tool
+=====================================
 
 .. image:: https://img.shields.io/badge/License-GPLv3-green
-        :target: https://github.com/Harmonize-Brazil/scripts_drone/blob/master/LICENSE
+        :target: https://github.com/Harmonize-Brazil/mosaic_utils/blob/master/LICENSE
         :alt: Software License
 
 
-.. image:: https://readthedocs.org/projects/scripts_drone/badge/?version=latest
-        :target: https://scripts_drone.readthedocs.io/en/latest/
+.. image:: https://readthedocs.org/projects/mosaic_utils/badge/?version=latest
+        :target: https://mosaic_utils.readthedocs.io/en/latest/
         :alt: Documentation Status
 
 
@@ -18,8 +34,8 @@ mosaic_utils
         :alt: Software Life Cycle
 
 
-.. image:: https://img.shields.io/github/tag/Harmonize-Brazil/scripts_drone.svg
-        :target: https://github.com/Harmonize-Brazil/scripts_drone/releases/latest
+.. image:: https://img.shields.io/github/tag/Harmonize-Brazil/mosaic_utils.svg
+        :target: https://github.com/Harmonize-Brazil/mosaic_utils/releases/latest
         :alt: Release
 
 
@@ -108,3 +124,4 @@ License
 
 .. admonition::
     Copyright (C) 2025 INPE/HARMONIZE.
+
