@@ -15,10 +15,6 @@
     You should have received a copy of the GNU General Public License
     along with this program. If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
 
-=============
-mosaic_utils
-=============
-
 .. image:: docs/source/_static/mosaic_utils_logo.png
    :alt: mosaic_utils logo
    :width: 180px
