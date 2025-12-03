@@ -1,5 +1,5 @@
 #
-# This file is part of mosaic_utils.
+# This file is part of mosaic_utils package.
 # Copyright (C) 2025 HARMONIZE/INPE.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
 #
+
 """Utility for post-processing of mosaics built using drone images, to remove areas affected by deformations (edge areas)
 
    This approach is based on Region of interest (ROI) delimitation using pixels with valid values (avoiding NoData) to create a polygon (vectorizing the raster) used to crop mosaic 

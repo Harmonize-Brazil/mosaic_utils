@@ -14,7 +14,7 @@ default:
 install:
 	@echo
 	@echo "\nChecking for updates..\n"
-	sudo apt-get update && sudo apt-get upgrade
+	sudo apt-get update -y && sudo apt-get upgrade -y
 	@echo
 	@echo "\n\nInstaling GDAL libraries and dependencies..\n"
 	sudo apt-get install -y g++ 

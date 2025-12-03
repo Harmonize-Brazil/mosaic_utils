@@ -1,0 +1,52 @@
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "wheel",
+    "setuptools-git-versioning==2.1.0"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mosaic_utils"
+dynamic = ["version"]
+description = "Utilities for processing drone mosaics."
+readme = "README.rst"
+
+authors = [
+    { name = "Marcos Rodrigues", email = "marcos.mlr@gmail.com" }
+]
+
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: POSIX :: Linux",
+]
+
+license = { text = "GNU General Public License v3" }
+requires-python = ">=3.10"
+
+dependencies = [
+    "numpy",
+    "geopandas",
+]
+
+# Extras Dependencies
+[project.optional-dependencies]
+docs = [
+    "Sphinx>=7.0",
+    "sphinx_rtd_theme",
+    "sphinx-copybutton",
+    "sphinx-tabs",
+]
+all = ["mosaic_utils[docs]"]
+## End extras dependencies
+
+[tool.setuptools]
+packages = { find = {} }
+
+[tool.setuptools.package-data]
+"mosaic_utils" = ["data/*", "*.yaml", "*.json"]
+
+[tool.setuptools-git-versioning]
+enabled = true
+dev_template = "{tag}.dev{ccount}"
+dirty_template = "{tag}.dev{ccount}"
