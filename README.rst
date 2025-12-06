@@ -24,8 +24,8 @@
         :target: https://github.com/Harmonize-Brazil/mosaic_utils/blob/main/LICENSE
         :alt: Software License
 
-.. image:: https://readthedocs.org/projects/mosaic_utils/badge/?version=latest
-        :target: https://mosaic_utils.readthedocs.io/en/latest/
+.. image:: https://readthedocs.org/projects/mosaic-utils/badge/?version=latest
+        :target: https://mosaic-utils.readthedocs.io/en/latest/
         :alt: Documentation Status
 
 .. image:: https://img.shields.io/badge/lifecycle-experimental-orange.svg
@@ -47,7 +47,7 @@ Documentation
 
 Full documentation is available at:
 
-`https://mosaic_utils.readthedocs.io/en/latest/ <https://mosaic_utils.readthedocs.io/en/latest/>`_
+`https://mosaic-utils.readthedocs.io/en/latest/ <https://mosaic-utils.readthedocs.io/en/latest/>`_
 
 Installation
 ============
