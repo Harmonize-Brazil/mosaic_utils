@@ -68,19 +68,17 @@ Examples, command references and workflows are available in:
 Quick Start
 -----------
 
-Run ``crop_mosaic.py`` to crop a raster using the convex hull of a negative buffer:
+Run ``crop-mosaic`` to crop a raster using the convex hull of a negative buffer:
 
 .. code-block:: shell
 
-    python crop_mosaic.py \
-        --mosaic_image /path/to/mosaic.tif \
-        --threshold_area 0.005
+    crop-mosaic --mosaic_image /path/to/mosaic.tif --threshold_area 0.005
 
 Or check all available options:
 
 .. code-block:: shell
 
-    python crop_mosaic.py --help
+    crop-mosaic --help
 
 License
 =======

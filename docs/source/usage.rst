@@ -1,12 +1,12 @@
 Usage
 =====
 
-Mosaic Cropping Utility (crop_mosaic.py)
+Mosaic Cropping Utility (crop-mosaic)
 
 During the photogrammetric generation of mosaics from drone imagery, it is common for the outer regions of the reconstructed mosaic to present geometric distortions. These artifacts typically arise due to an insufficient number of homogeneous tie points between overlapping images, especially near the edges of the flight area.
 
 To ensure a cleaner and more accurate final product, it is recommended to remove these border regions.
-The utility crop_mosaic.py automates this process by clipping the input mosaic using the polygon that defines the mapped area. This results in a final mosaic that contains only properly reconstructed regions, free of edge distortions and artifacts.
+The utility ``crop-mosaic`` automates this process by clipping the input mosaic using the polygon that defines the mapped area. This results in a final mosaic that contains only properly reconstructed regions, free of edge distortions and artifacts.
 
 
 Basic example
@@ -14,10 +14,10 @@ Basic example
 
 .. code-block:: shell
 
-    python crop_mosaic.py --mosaic_image path/to/mosaic.tif --threshold_area 0.005
+    crop-mosaic --mosaic_image path/to/mosaic.tif --threshold_area 0.005
 
 Output:
-    Cropped mosaic saved to: mosaic_cropped.tif
+    Cropped mosaic saved to: path/to/mosaic_cropped.tif
 
 
 The Region of Interest (ROI) is defined by a polygon generated from vectorizing the valid pixel values of the input raster.
@@ -28,4 +28,4 @@ For more details about the available parameters, you can use the ``--help`` opti
 
 .. code-block:: shell
 
-    python crop_mosaic.py --help
+    crop-mosaic --help

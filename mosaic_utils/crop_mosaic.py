@@ -18,27 +18,29 @@
 
 """Utility for post-processing of mosaics built using drone images, to remove areas affected by deformations (edge areas)
 
-   This approach is based on Region of interest (ROI) delimitation using pixels with valid values (avoiding NoData) to create a polygon (vectorizing the raster) used to crop mosaic 
-   using a threshold (%) of the mapped area"""
-
+   This approach is based on Region of interest (ROI) delimitation using pixels with valid values (avoiding NoData) to create a polygon (vectorizing the raster)
+   used to crop mosaic using a threshold (%) of the mapped area."""
 
 # --------------------------
 #        Imports
 # --------------------------
-from osgeo import osr, gdal, ogr
-import numpy as np
-import geopandas as gpd
-from shapely.geometry import MultiPolygon, Polygon
-from multiprocessing import cpu_count
-import subprocess
 import os
-import sys
+import time
+import json
 import tempfile
+import numpy as np
+import rasterio
+from rasterio.features import shapes
+from shapely.geometry import shape, mapping, MultiPolygon, Polygon
+from shapely.ops import unary_union, transform as shapely_transform
+from multiprocessing import Pool, cpu_count
+from rasterio.windows import Window
+import subprocess
+from osgeo import gdal
+import argparse
+from pyproj import Transformer, CRS
 
 """ Settings """
-result = subprocess.run(['gdal-config','--datadir'], capture_output=True, text=True)
-os.environ['GDAL_DATA'] = result.stdout.replace('\n','') #set gdal data path
-os.environ['PROJ_LIB'] = result.stdout.replace('\n','').replace('gdal','proj') #set proj path
 gdal.UseExceptions()  # this allows GDAL to throw Python Exceptions
 num_workers = int(cpu_count() - (cpu_count() * 0.20)) # using about 80% of cores
 
@@ -46,276 +48,542 @@ num_workers = int(cpu_count() - (cpu_count() * 0.20)) # using about 80% of cores
 if not tuple([int(i) for i in gdal.__version__.split('.')]) >= (3,1):
     raise RuntimeError('GDAL version requirement for support COG creation is >= 3.1 version installed:{}'.format(gdal.__version__))
 
+# ANSI COLORS
+RED     = "\033[91m"
+GREEN   = "\033[92m"
+YELLOW  = "\033[93m"
+BLUE    = "\033[94m"
+MAGENTA = "\033[95m"
+CYAN    = "\033[96m"
+BOLD    = "\033[1m"
+RESET   = "\033[0m"
+
 
 # --------------------------
 #        Functions
 # --------------------------
-def get_valid_namefile(src_filename):
+def step(name: str, step_num=None, total_steps=None):
     """
-    Create a valid filename to save raster cropped by source filename of raster.
+    Start a timed processing step and print a formatted header.
 
-    Arguments
-    ---------
-    src_filename: str
-        Input filename of mosaic to crop
+    This function prints a formatted message indicating the start of a
+    processing step, optionally including step counters (e.g., "3/10").
+    It returns a timestamp that should later be passed to `end()` to
+    compute and display the elapsed execution time.
 
-    Returns
-    ---------
-    String with name for output cropped raster of mosaic
+    Args:
+        name (str): Descriptive name of the processing step.
+        step_num (int, optional): Index of the current step in a sequence.
+            If provided, the message is printed in the format
+            "[step_num/total_steps] <name>...".
+        total_steps (int, optional): Total number of steps in the sequence.
+            Required when `step_num` is used.
+
+    Returns:
+        float: Timestamp (in seconds since epoch) marking when the step began.
     """
-    dirname = os.path.dirname(src_filename)
-    prefix,suffix = os.path.splitext(os.path.basename(src_filename))
-    return os.path.join(dirname,prefix+'_cropped'+suffix)
-
-
-# Remove inner lines - https://stackoverflow.com/a/70387141
-def remove_interiors(poly):
-    """
-    Close polygon holes by limitation to the exterior ring.
-
-    Arguments
-    ---------
-    poly: shapely.geometry.Polygon
-        Input shapely Polygon
-
-    Returns
-    ---------
-    Polygon without any interior holes
-    """
-    if poly.interiors:
-        return Polygon(list(poly.exterior.coords))
+    if step_num != None:
+        print(f"\n{RED}{BOLD}[{step_num}/{total_steps}]{CYAN} {name}...{RESET}")
     else:
-        return poly
+        print(f"\n{CYAN}=== {name} ==={RESET}")
+    return time.time()
 
 
-def pop_largest(gs):
+def end(t0):
     """
-    Pop the largest polygon off of a GeoSeries
+    Finalize a timed processing step and print the elapsed time.
 
-    Arguments
-    ---------
-    gs: geopandas.GeoSeries
-        Geoseries of Polygon or MultiPolygon objects
+    Calculates the execution time of a previously started step and
+    prints it using ANSI-colored formatting.
 
-    Returns
-    ---------
-    Largest Polygon in a Geoseries
+    Args:
+        t0 (float): Timestamp returned by `step()`, representing the
+            start time.
+
+    Returns:
+        float: Elapsed time for the completed step.
     """
-    geoms = [g.area for g in gs]
-    return gs.pop(geoms.index(max(geoms)))
+    dt = time.time() - t0
+    print(f"{MAGENTA}→ Step time: {dt:.2f} s{RESET}")
+    return dt
 
 
-def close_holes(geom):
+def reproject_geom(geom, src_crs, dst_crs):
     """
-    Remove holes in a polygon geometry
+    Reproject a Shapely geometry between two coordinate reference systems.
 
-    Arguments
-    ---------
-    gseries: geopandas.GeoSeries
-        Geoseries of Polygon or MultiPolygon objects
+    Args:
+        geom (shapely.geometry.base.BaseGeometry): Input geometry.
+        src_crs (str or CRS): Source CRS, in any format supported by
+            `pyproj.CRS.from_user_input`.
+        dst_crs (str or CRS): Destination CRS.
 
-    Returns
-    ---------
-    Largest Polygon in a Geoseries
+    Returns:
+        shapely.geometry.base.BaseGeometry: The geometry reprojected into
+        the destination CRS.
+
+    Raises:
+        ValueError: If the source CRS is None.
+    """
+    if src_crs is None:
+        raise ValueError("source CRS is None, cannot reproject geometry")
+    if isinstance(src_crs, CRS):
+        src = src_crs
+    else:
+        src = CRS.from_user_input(src_crs)
+    dst = CRS.from_user_input(dst_crs)
+    if src == dst:
+        return geom
+    transformer = Transformer.from_crs(src, dst, always_xy=True)
+    return shapely_transform(transformer.transform, geom)
+
+
+def ensure_valid_geometry(geom):
+    """
+    Ensure a geometry is valid and non-empty, fixing it if necessary.
+
+    Invalid polygons are repaired using a zero-width buffer. MultiPolygon
+    objects are cleaned to remove zero-area parts before merging.
+
+    Args:
+        geom (shapely.geometry.Polygon or MultiPolygon): Input geometry.
+
+    Returns:
+        shapely.geometry.Polygon or MultiPolygon: A valid geometry.
+
+    Raises:
+        RuntimeError: If all polygons have zero area after cleaning.
+        TypeError: If the input geometry type is not supported.
+    """
+
+    # Case geom is Polygon
+    if isinstance(geom, Polygon):
+        if geom.is_valid and geom.area > 0:
+            return geom
+        else:
+            geom = geom.buffer(0)
+            return geom
+
+    # Case geom is MultiPolygon
+    if isinstance(geom, MultiPolygon):
+        polys = [p for p in geom.geoms if p.area > 0]
+        if not polys:
+            raise RuntimeError("All polygons have zero area after cleanup.")
+        merged = unary_union(polys)
+        return merged
+
+    # Any other unexpected type
+    raise TypeError(f"Unsupported geometry type: {type(geom)}")
+
+
+def largest_polygon(geom):
+    """
+    Return the largest polygon from a MultiPolygon.
+
+    Args:
+        geom (Polygon or MultiPolygon): Input geometry.
+
+    Returns:
+        Polygon: The largest polygon, or the original polygon if the
+        input is not a MultiPolygon.
     """
     if isinstance(geom, MultiPolygon):
-        ser = gpd.GeoSeries([remove_interiors(g) for g in geom.geoms])
-        big = pop_largest(ser)
-        outers = ser.loc[~ser.within(big)].tolist()
-        if outers:
-            return MultiPolygon([big] + outers)
-        return Polygon(big)
-    if isinstance(geom, Polygon):
-        return remove_interiors(geom)
+        maxp = max(geom.geoms, key=lambda g: g.area)
+        return maxp
+    return geom
 
-def define_roi(file_in):
+
+def _shapes_from_tile_alpha(args):
     """
-    Create the Region Of Interest (ROI), delimited by pixel valid values.
+    Extract polygons from the alpha band of a raster tile.
 
-    Arguments
-    ---------
-    file_in: str
-        Input filename of mosaic to delimit the ROI 
+    This worker function is used in parallel processing to extract valid
+    polygon shapes from the alpha band (band 4) of a windowed subset of
+    the raster.
 
-    Returns
-    ---------
-    roi_area_dissolved: geopandas.DataFrame
-        Object with a polygon delimiting the ROI 
+    Args:
+        args (tuple): A tuple containing:
+            - path (str): Path to the raster file.
+            - window (rasterio.windows.Window): Window region to read.
+
+    Returns:
+        list[shapely.geometry.Polygon]: A list of polygons extracted from
+        the tile. Returns an empty list if the tile has no valid pixels.
     """
-    src_ds = gdal.Open(str(file_in), gdal.GA_ReadOnly)
+    path, window = args
 
-    driver = gdal.GetDriverByName('MEM') #To avoid error of overview creation
-    dst_ds = driver.Create('', xsize=src_ds.RasterXSize, ysize=src_ds.RasterYSize,
-                        bands=1, eType=gdal.GDT_Byte)
+    with rasterio.open(path) as src:
+        # Read ONLY alpha band
+        alpha = src.read(4, window=window)
+
+        # Quickly skip completely empty tiles
+        if not np.any(alpha):
+            return []
+
+        mask = alpha > 0
+        transform = src.window_transform(window)
+
+        results = []
+        for geom, value in shapes(mask.astype(np.uint8), mask=mask, transform=transform):
+            if value == 1:
+                results.append(shape(geom))
+
+        return results
+
+
+# Paralelo: raster inteiro → polígonos válidos
+def raster_to_polygon_parallel(step_num, total_steps, path, block_size=2048):
+    """
+    Extract polygons from an RGB(A) raster using only the alpha mask.
+
+    The raster is processed in rectangular tiles, enabling parallel
+    processing for large mosaics. Only pixels where the alpha band is
+    greater than zero are considered valid.
+
+    Args:
+        step_num (int): Index of the current step in a sequence.
+        total_steps (int): Total number of steps in the sequence.
+        path (str): Path to the raster file.
+        block_size (int, optional): Tile size (in pixels) used for
+            parallel processing. Defaults to 2048.
+
+    Returns:
+        Polygon or MultiPolygon: A merged geometry representing the union
+        of all valid polygons extracted from the alpha mask.
+
+    Raises:
+        RuntimeError: If no polygons are found or if the cleaned polygon
+            list is empty.
+    """
+    t0 = step("Converting mask to polygons (parallel tiles)",step_num,total_steps)
+
     
+    # Create list of tiles    
+    with rasterio.open(path) as src:
+        width, height = src.width, src.height
+        transform = src.transform
 
-    # Set projection using source file
-    dst_ds.SetGeoTransform(src_ds.GetGeoTransform())
-    dst_ds.SetProjection(src_ds.GetProjection())
-       
-    print('Reading RGB mosaic...')
-    arr = src_ds.ReadAsArray()
-    arr = arr[0:3,...] #keep only RGB
-    nodata = src_ds.GetRasterBand(1).GetNoDataValue()    
-    if nodata == None:
-        nodata = int(arr[0,0,0])
+        tiles = []
+        for y in range(0, height, block_size):
+            for x in range(0, width, block_size):
+                w = Window(
+                    col_off=x,
+                    row_off=y,
+                    width=min(block_size, width - x),
+                    height=min(block_size, height - y)
+                )
+                tiles.append((path, w))
 
-    arr_out = np.ones([arr.shape[1],arr.shape[2]], dtype=np.int8)
-    print('Delimiting the area with valid pixels...')
-    arr_out[(arr[0,...] == nodata) & (arr[1,...] == nodata) & (arr[2,...] == nodata)] = 0
-    del arr
+    print(f"{YELLOW}→ Tiles to process: {len(tiles)} using {num_workers} cores{RESET}")
 
-    # Create a band with mask of valid pixels    
-    band = dst_ds.GetRasterBand(1)
-    band.WriteArray(arr_out)
-    band.SetNoDataValue(nodata)
-    band.FlushCache()
-    del arr_out
-   
-    #  Create shapefile with polygon delimiting the ROI
-    prefix = os.path.splitext(os.path.basename(file_in))[0]
-    with tempfile.TemporaryDirectory() as tmp:
-        path_shp = os.path.join(tmp, prefix+'.shp')
-        dst_layername = "PolyFtr"
-        drv = ogr.GetDriverByName("ESRI Shapefile")
-        dst_shp_ds = drv.CreateDataSource(path_shp)
-        srs = osr.SpatialReference()
-        srs.ImportFromWkt(src_ds.GetProjection()) 
-        dst_layer = dst_shp_ds.CreateLayer(dst_layername, srs = srs)
-        print('Creating polygon for delimited area...')
-        gdal.Polygonize(srcBand=band, maskBand=band, outLayer=dst_layer, iPixValField=-1, options=[], callback=None)
-        dst_shp_ds.Destroy()         
-        
-        # Read the polygon of ROI
-        roi_area = gpd.read_file(path_shp)
-        roi_area['id'] = 'valid'
-        roi_area_dissolved =  roi_area.dissolve(by='id')
-        del roi_area
-
-        # Once we're done, close properly the dataset
-        src_ds.FlushCache()
-        del src_ds
-        dst_ds.FlushCache()
-        del dst_ds
-
-    # Remove inner lines    
-    roi_area_dissolved.geometry = roi_area_dissolved.geometry.apply(lambda p: close_holes(p))
-
-    return roi_area_dissolved
-   
-
-def crop_mosaic_by_polygon(file_in,file_out,threshold_area):
-    """
-    Crop a raster file based on the convex hull of a negative buffer created using the percentage of Region Of Interest (ROI), delimited by pixel valid values.
-
-    Arguments
-    ---------
-    file_in: str
-        Input filename of mosaic to crop
-    file_out: str
-        Output filename of cropped mosaic
-    threshold_area: float
-        Input value to create a negative buffer by ROI    
-
-    Returns
-    ---------
-    None
-    """
-    prefix = os.path.splitext(os.path.basename(file_in))[0]
-    roi_area = define_roi(file_in)
     
-    # Create negative buffer to remove deformed borders of image using a threshold based on percentage of ROI in meters:
-    # Details about buffer method http://shapely.readthedocs.io/en/latest/manual.html#object.buffer
-    roi_area = roi_area.to_crs('EPSG:3395') #to CRS in meters
-    roi_area_buffered_negative = roi_area.buffer(-1. *  ((max(roi_area['geometry'].area) * threshold_area) / 100.), resolution=5,single_sided=True)
+    # Process tiles in parallel
+    polys = []
+    with Pool(processes=num_workers) as p:
+        for result in p.imap_unordered(_shapes_from_tile_alpha, tiles, chunksize=1):
+            if result:
+                polys.extend(result)
 
-    with tempfile.TemporaryDirectory() as tmp:
-        # Save negative buffer to avoid a final crop with recesses areas:
-        path_shp = os.path.join(tmp, prefix+'_negative_buffer.shp') 
-        roi_area_buffered_negative.to_file(path_shp)
+    if not polys:
+        raise RuntimeError("No polygons extracted from raster (alpha mask may be empty).")
 
-        print('Cropping the mosaic with a negative buffer from the delimited area...') 
-        file_out_tmp = os.path.join(os.path.dirname(file_in), prefix+'_tmp.tif')
-        
-        dst_output = gdal.Warp(file_out_tmp,file_in, 
-                            options="-overwrite -multi -wm 80%  -of COG -cutline {} -crop_to_cutline -co BIGTIFF=YES" \
-                                " -wo OPTIMIZE_SIZE=TRUE -co NUM_THREADS={}".format(path_shp,str(num_workers)))    
+    
+    # Final cleaning    
+    cleaned = []
+    for p in polys:
+        if p.is_empty or p.area == 0:
+            continue
+        if not p.is_valid:
+            p = p.buffer(0)
+        if isinstance(p, (Polygon, MultiPolygon)) and not p.is_empty:
+            cleaned.append(p)
 
-    roi_area = define_roi(file_out_tmp)
-    # Create negative buffer to remove recesses areas of image based on threshold_area of 0.001 of ROI in meters:
-    # Details about buffer method http://shapely.readthedocs.io/en/latest/manual.html#object.buffer
-    roi_area = roi_area.to_crs('EPSG:3395') #to CRS in meters
-    roi_area_buffered_negative = roi_area.buffer(-1. *  ((max(roi_area['geometry'].area) *  0.001) / 100.), resolution=5,single_sided=True)
+    if not cleaned:
+        raise RuntimeError("Polygon list empty after cleaning.")
 
+    
+    # Merge polygons    
+    try:
+        merged = unary_union(cleaned)
+    except Exception:
+        # retry safer
+        merged = unary_union([g.buffer(0) for g in cleaned])
 
-    with tempfile.TemporaryDirectory() as tmp:
-        # Save a convex hull from the negative buffer to avoid a final crop with serrated edges:        
-        path_shp = os.path.join(tmp, prefix+'_convex_hull.shp') 
-        roi_area_buffered_negative.convex_hull.to_file(path_shp)
-
-        print('Cropping the mosaic with a convex hull from the buffer that delimited the area...')  
-        block_size_output = 256 #Sets the tile width and height in pixels. Must be divisible by 16. https://gdal.org/drivers/raster/cog.html#general-creation-options
-        dst_output = gdal.Warp(file_out,file_out_tmp, 
-                            options="-overwrite -multi -wm 80%  -of COG -cutline {} -crop_to_cutline -co BIGTIFF=YES -co BLOCKSIZE={}" \
-                                " -co COMPRESS=DEFLATE -wo OPTIMIZE_SIZE=TRUE -co NUM_THREADS={}".format(path_shp,str(block_size_output),str(num_workers)))
-        if os.path.exists(file_out):
-            print('\nCrop file created at:\n',file_out)
-    os.remove(file_out_tmp) #remove temporary file       
+    end(t0)
+    return merged
 
 
-def main(argv):
-    if argv.raster_output == None:
-        raster_output = get_valid_namefile(argv.mosaic_image)
+def compute_negative_buffer(step_num, total_steps, geom, threshold_area, geom_crs):
+    """
+    Apply a negative buffer to a geometry based on a percentage of its area.
+
+    The geometry is reprojected to a suitable metric CRS so the buffer
+    distance is computed in meters. After buffering, the result is
+    reprojected back to the original CRS.
+
+    Args:
+        step_num (int): Index of the current step in a sequence.
+        total_steps (int): Total number of steps in the sequence.
+        geom (Polygon or MultiPolygon): Input geometry in the raster CRS.
+        threshold_area (float): Area-based threshold used to compute the
+            buffer distance (threshold_area * area / 100).
+        geom_crs (str or CRS): CRS of the geometry.
+
+    Returns:
+        Polygon or MultiPolygon: Buffered and reprojected geometry.
+
+    Raises:
+        ValueError: If CRS is invalid or reprojection fails.
+    """
+    t0 = step(f"Negative buffer with distance in meters: ({threshold_area} * ROI_area) / 100", step_num, total_steps)
+    # For distance calculations use a metric CRS. Choose an appropriate UTM zone or WebMercator
+    # Determine a suitable metric CRS: use local UTM from centroid if geom_crs is geographic
+    src_crs = CRS.from_user_input(geom_crs)
+    metric_crs = None
+    if src_crs.is_geographic:
+        # choose UTM zone from centroid
+        lon, lat = geom.centroid.x, geom.centroid.y
+        utm_crs = CRS.from_proj4(f"+proj=utm +zone={int((lon + 180) / 6) + 1} +datum=WGS84 +units=m +no_defs")
+        metric_crs = utm_crs
     else:
-        raster_output = argv.raster_output
+        # use same CRS if it's already projected
+        metric_crs = src_crs
 
-    crop_mosaic_by_polygon(argv.mosaic_image,raster_output,argv.threshold_area)
- 
+    # reproject geom to metric CRS
+    geom_metric = reproject_geom(geom, src_crs, metric_crs)
+
+    # area in metric units (m^2)
+    area = geom_metric.area
+    # threshold_area provided by the user is expected as a fraction of the total area
+    dist = (area * threshold_area) / 100.0
+
+    # buffer negative in meters
+    geom_metric_buffered = geom_metric.buffer(-dist, resolution=8)
+
+    # project back to original geom_crs
+    buffered_back = reproject_geom(geom_metric_buffered, metric_crs, src_crs)
+
+    # ensure valid
+    buffered_back = ensure_valid_geometry(buffered_back)
+
+    end(t0)
+    return buffered_back
+
+
+def fast_convex_hull(step_num, total_steps, geom):
+    """
+    Compute the convex hull of a geometry with validation.
+
+    Args:
+        step_num (int): Index of the current step in a sequence.
+        total_steps (int): Total number of steps in the sequence.
+        geom (Polygon or MultiPolygon): Geometry for which the convex
+            hull is computed.
+
+    Returns:
+        Polygon: Valid convex hull geometry.
+    """
+    t0 = step("Convex hull simplification", step_num, total_steps)
+    hull = geom.convex_hull
+    hull = ensure_valid_geometry(hull)
+    end(t0)
+    return hull
+
+
+
+# WRITE GEOJSON (in EPSG:4326) and crop with GDAL Warp
+def geom_to_geojson_path(step_num, total_steps, geom, geom_crs):
+    """
+    Convert a geometry to a temporary GeoJSON file in EPSG:4326.
+
+    The geometry is reprojected to latitude/longitude so GDAL can
+    interpret it correctly as a cutting mask.
+
+    Args:
+        step_num (int): Index of the current step in a sequence.
+        total_steps (int): Total number of steps in the sequence.
+        geom (Polygon or MultiPolygon): Geometry in raster CRS.
+        geom_crs (str or CRS): CRS of the geometry.
+
+    Returns:
+        str: Path to the temporary GeoJSON file.
+    """
+    t0 = step("Preparing GeoJSON cutline (EPSG:4326)...",step_num, total_steps)
+    # transform geom to EPSG:4326
+    geom_4326 = reproject_geom(geom, geom_crs, "EPSG:4326")
+    # ensure valid and simple (largest polygon)
+    geom_4326 = ensure_valid_geometry(geom_4326)
+    if isinstance(geom_4326, MultiPolygon):
+        geom_4326 = largest_polygon(geom_4326)
+
+    geojson = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {},
+                "geometry": mapping(geom_4326)
+            }
+        ]
+    }
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".geojson", mode="w", encoding="utf-8")
+    try:
+        json.dump(geojson, tmp)
+        tmp.flush()
+        path = tmp.name
+    finally:
+        tmp.close()
+    end(t0)
+    return path
+
+
+def crop_with_mask(step_num, total_steps, input_path, output_path, geom, geom_crs):
+    """
+    Crop a raster using a geometry as a cutline.
+
+    The geometry is written as GeoJSON in EPSG:4326 and passed to
+    GDAL Warp to perform the clipping operation. A COG is produced as
+    output.
+
+    Args:
+        step_num (int): Index of the current step in a sequence.
+        total_steps (int): Total number of steps in the sequence.
+        input_path (str): Path to the input raster.
+        output_path (str): Path to the output raster.
+        geom (Polygon or MultiPolygon): Cropping geometry in raster CRS.
+        geom_crs (str or CRS): CRS of the geometry.
+
+    Raises:
+        subprocess.CalledProcessError: If both GDAL.Warp and gdalwarp
+            CLI fallback fail.
+    """
+    
+
+    # create geojson in EPSG:4326 (so GDAL reads as lat/lon)
+    geojson_path = geom_to_geojson_path(step_num, total_steps, geom, geom_crs)
+
+    # build WarpOptions instead of passing a long string (safer)
+    block_size_output = 512 #Sets the tile width and height in pixels. Must be divisible by 16. https://gdal.org/drivers/raster/cog.html#general-creation-options
+    warp_opts = gdal.WarpOptions(
+        format="COG",
+        cutlineDSName=geojson_path,
+        cropToCutline=True,
+        dstAlpha=False,
+        creationOptions=["COG=YES", "BIGTIFF=YES", "COMPRESS=DEFLATE", f"BLOCKSIZE={block_size_output}", f"NUM_THREADS={num_workers}"],
+        warpOptions=["OPTIMIZE_SIZE=TRUE"],
+        multithread=True
+    )
+
+
+    t0 = step("Cropping with GDAL Warp...", step_num+1, total_steps)
+    # perform warp
+    try:
+        gdal.Warp(destNameOrDestDS=output_path, srcDSOrSrcDSTab=input_path, options=warp_opts)
+    except Exception as e:
+        # try using subprocess gdalwarp as fallback (older GDAL APIs)
+        print(f"{YELLOW}GDAL.Warp failed, trying gdalwarp CLI fallback: {e}{RESET}")
+        cmd = [
+            "gdalwarp",
+            "-cutline", geojson_path,
+            "-crop_to_cutline",
+            "-of", "COG",
+            "-co", f"BLOCKSIZE={block_size_output}",
+            "-co", "COMPRESS=DEFLATE",        
+            "-co", "BIGTIFF=YES",
+            "-co", f"NUM_THREADS={num_workers}",
+            input_path,
+            output_path
+        ]
+        subprocess.run(cmd, check=True)
+
+    # remove geojson
+    try:
+        os.remove(geojson_path)
+    except Exception:
+        pass
+
+    end(t0)
+
+
+
+# MAIN PIPELINE
+def crop_mosaic_by_polygon(input_file, output_file, threshold):
+    """
+    Full mosaic cropping pipeline using alpha mask + geometry processing.
+
+    This pipeline:
+      1. Extracts polygons from the alpha band.
+      2. Computes a negative buffer.
+      3. Applies a convex hull.
+      4. Validate the convex hull.
+      5. Crops the mosaic using GDAL Warp.
+
+    Args:
+        input_file (str): Path to the input mosaic.
+        output_file (str): Path where the cropped mosaic will be saved.
+        threshold (float): Area-based threshold used for negative buffering.
+
+    Returns:
+        None
+    """
+    total_start = step("Crop Mosaic Pipeline")
+
+    # read transform and CRS
+    with rasterio.open(input_file) as src:
+        transform = src.transform
+        raster_crs = src.crs.to_string()
+
+    total_steps = 6
+    # Step 1 – polygon (mask pixels to polygons in raster CRS)
+    geom = raster_to_polygon_parallel(1, total_steps, input_file, block_size=2048)
+
+    # Step 2 – negative buffer (computed in metric CRS and converted back)
+    nb = compute_negative_buffer(2, total_steps, geom, threshold, raster_crs)
+
+    # Step 3 – convex hull
+    hull = fast_convex_hull(3, total_steps,nb)
+
+    # Step 4 - ensure hull is in raster CRS (it already is, but we enforce type)
+    t0 = step("Validating convex hull...", 4,total_steps)
+    hull = ensure_valid_geometry(hull)
+    end(t0)
+
+    # Step 5 – crop (write geojson in EPSG:4326 so GDAL transforms correctly)
+    crop_with_mask(5, total_steps, input_file, output_file, hull, raster_crs)
+
+    print(f"{GREEN}\nMosaic cropped successfully!\nSaved at: {output_file}{RESET}")
+
+    end(total_start)
+
+
+
+# CLI
+def main():
+    """
+    Command-line interface for the crop mosaic tool.
+
+    Parses user arguments, sets the output file, and launches the full
+    crop pipeline.
+
+    Returns:
+        None
+    """
+    parser = argparse.ArgumentParser(description="Crop mosaic tool")
+    parser.add_argument("--mosaic_image", required=True)
+    parser.add_argument("--threshold_area", type=float, required=True)
+    parser.add_argument("--raster_output", default=None)
+
+    args = parser.parse_args()
+
+    if args.raster_output is None:
+        prefix, ext = os.path.splitext(args.mosaic_image)
+        output = prefix + "_cropped" + ext
+    else:
+        output = args.raster_output
+
+    crop_mosaic_by_polygon(args.mosaic_image, output, args.threshold_area)
+
 
 if __name__ == "__main__":
-
-    # Prompt user for (optional) command line arguments, when run from IDLE:
-    if 'idlelib' in sys.modules: sys.argv.extend(input("Args: ").split())
-
-    # Process the arguments
-    from argparse import ArgumentParser, SUPPRESS
-    import arghelper
-
-    # Disable default help
-    parser = ArgumentParser(description='Crop raster file (mosaic) to avoid deformed areas near to edges of image.', add_help=False)
-    required = parser.add_argument_group('required arguments')
-    optional = parser.add_argument_group('optional arguments')
-
-    # Add back help
-    try:          
-        required.add_argument('--mosaic_image', type=lambda x: arghelper.is_valid_file(parser, x),
-                        help='Path to the mosaic file. Example /home/user/FieldWorkCampaigns/Mocajuba2023/EscolaOficina_20231107/Mosaic/EscolaOficina_7nov-orthophoto.tif',
-                            metavar='path_to_file', required=True)
-        required.add_argument('--threshold_area',
-                        help='Percentage value from area to create a negative buffer of ROI to crop deformed regions. For example 0.005 (value defined in our tests)',
-                            metavar='0.005', type=float, required=True)
-        optional.add_argument('-h','--help',action='help',default=SUPPRESS,help='show this help message and exit') 
-        optional.add_argument('--raster_output', type=lambda x: arghelper.is_valid_namefile(parser, x), 
-                              help='COG filename output for cropped mosaic (including path).  \
-                                Example /home/user/FieldWorkCampaigns/Mocajuba2023/EscolaOficina_20231107/Mosaic/EscolaOficina_7nov-orthophoto_cropped.tif',
-                            metavar='path_to_file')
-    except:
-        print('\n')
-        print(100*'-')
-        parser.print_help()
-        sys.exit(1)
-        
-    
-    if len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(1)
-
-    sys.exit(main(parser.parse_args()))
-
-
-    
-
-
-#filename = "/home/user/Desktop/HARMONIZE-Br_Project/src/FieldWorkCampaigns/Mocajuba2023/EscolaOficina_20231107/Mosaic/EscolaOficina_7nov-orthophoto.tif"
-#create_polygon(filename)    
-
+    main()

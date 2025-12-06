@@ -27,5 +27,6 @@ License
    usage
    api
    authors
+   changelog
 
 

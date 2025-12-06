@@ -43,7 +43,7 @@ Using a *Python Virtual Environment*:
 
     make install
 
-Problems with GDAL import, please see these `related issues and solutions <../../ISSUES.rst>`_!
+Problems with GDAL import, please see these `related issues and solutions <../../../ISSUES.rst>`_!
 
 7. Editable install (development):
 

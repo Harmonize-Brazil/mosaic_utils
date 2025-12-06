@@ -25,6 +25,8 @@ license = { text = "GNU General Public License v3" }
 requires-python = ">=3.10"
 
 dependencies = [
+    "rasterio",
+    "shapely",
     "numpy",
     "geopandas",
 ]
@@ -50,3 +52,6 @@ packages = { find = {} }
 enabled = true
 dev_template = "{tag}.dev{ccount}"
 dirty_template = "{tag}.dev{ccount}"
+
+[project.scripts]
+crop-mosaic = "mosaic_utils.crop_mosaic:main"
