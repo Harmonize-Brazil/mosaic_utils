@@ -56,8 +56,6 @@ For full installation instructions, please refer to:
 
 `docs/source/installation.rst <docs/source/installation.rst>`_
 
-Obs.: For Windows `click here <https://github.com/Harmonize-Brazil/mosaic_utils/tree/windows>`_.
-
 Usage
 =====
 
@@ -83,5 +81,4 @@ Or check all available options:
 License
 =======
 
-.. admonition::
-    Copyright (C) 2025 INPE/HARMONIZE.
+Copyright (C) 2025 INPE/HARMONIZE.

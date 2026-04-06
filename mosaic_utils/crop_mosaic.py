@@ -26,27 +26,22 @@
 # --------------------------
 import os
 import time
-import json
-import tempfile
 import numpy as np
 import rasterio
+from rasterio.windows import Window
+from rasterio.features import geometry_mask
+from rasterio.shutil import copy as rio_copy
 from rasterio.features import shapes
 from shapely.geometry import shape, mapping, MultiPolygon, Polygon
 from shapely.ops import unary_union, transform as shapely_transform
 from multiprocessing import Pool, cpu_count
-from rasterio.windows import Window
-import subprocess
-from osgeo import gdal
 import argparse
 from pyproj import Transformer, CRS
 
+
 """ Settings """
-gdal.UseExceptions()  # this allows GDAL to throw Python Exceptions
 num_workers = int(cpu_count() - (cpu_count() * 0.20)) # using about 80% of cores
 
-# Check version of GDAL with driver that supports the creation of Cloud Optimized GeoTIFF (COG) (Added in version 3.1):
-if not tuple([int(i) for i in gdal.__version__.split('.')]) >= (3,1):
-    raise RuntimeError('GDAL version requirement for support COG creation is >= 3.1 version installed:{}'.format(gdal.__version__))
 
 # ANSI COLORS
 RED     = "\033[91m"
@@ -176,23 +171,6 @@ def ensure_valid_geometry(geom):
     raise TypeError(f"Unsupported geometry type: {type(geom)}")
 
 
-def largest_polygon(geom):
-    """
-    Return the largest polygon from a MultiPolygon.
-
-    Args:
-        geom (Polygon or MultiPolygon): Input geometry.
-
-    Returns:
-        Polygon: The largest polygon, or the original polygon if the
-        input is not a MultiPolygon.
-    """
-    if isinstance(geom, MultiPolygon):
-        maxp = max(geom.geoms, key=lambda g: g.area)
-        return maxp
-    return geom
-
-
 def _shapes_from_tile_alpha(args):
     """
     Extract polygons from the alpha band of a raster tile.
@@ -231,7 +209,6 @@ def _shapes_from_tile_alpha(args):
         return results
 
 
-# Paralelo: raster inteiro → polígonos válidos
 def raster_to_polygon_parallel(step_num, total_steps, path, block_size=2048):
     """
     Extract polygons from an RGB(A) raster using only the alpha mask.
@@ -390,121 +367,90 @@ def fast_convex_hull(step_num, total_steps, geom):
     return hull
 
 
-
-# WRITE GEOJSON (in EPSG:4326) and crop with GDAL Warp
-def geom_to_geojson_path(step_num, total_steps, geom, geom_crs):
-    """
-    Convert a geometry to a temporary GeoJSON file in EPSG:4326.
-
-    The geometry is reprojected to latitude/longitude so GDAL can
-    interpret it correctly as a cutting mask.
-
-    Args:
-        step_num (int): Index of the current step in a sequence.
-        total_steps (int): Total number of steps in the sequence.
-        geom (Polygon or MultiPolygon): Geometry in raster CRS.
-        geom_crs (str or CRS): CRS of the geometry.
-
-    Returns:
-        str: Path to the temporary GeoJSON file.
-    """
-    t0 = step("Preparing GeoJSON cutline (EPSG:4326)...",step_num, total_steps)
-    # transform geom to EPSG:4326
-    geom_4326 = reproject_geom(geom, geom_crs, "EPSG:4326")
-    # ensure valid and simple (largest polygon)
-    geom_4326 = ensure_valid_geometry(geom_4326)
-    if isinstance(geom_4326, MultiPolygon):
-        geom_4326 = largest_polygon(geom_4326)
-
-    geojson = {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "properties": {},
-                "geometry": mapping(geom_4326)
-            }
-        ]
-    }
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".geojson", mode="w", encoding="utf-8")
-    try:
-        json.dump(geojson, tmp)
-        tmp.flush()
-        path = tmp.name
-    finally:
-        tmp.close()
-    end(t0)
-    return path
-
-
 def crop_with_mask(step_num, total_steps, input_path, output_path, geom, geom_crs):
     """
-    Crop a raster using a geometry as a cutline.
+    Crop a raster using a geometry as a mask with memory-efficient
+    windowed processing, and generate a Cloud Optimized GeoTIFF (COG).
 
-    The geometry is written as GeoJSON in EPSG:4326 and passed to
-    GDAL Warp to perform the clipping operation. A COG is produced as
-    output.
+    The raster is processed block-by-block to minimize memory usage.
+    A temporary tiled and compressed GeoTIFF is first created, then
+    converted into a standards-compliant COG using rasterio's COG driver.
 
     Args:
         step_num (int): Index of the current step in a sequence.
         total_steps (int): Total number of steps in the sequence.
         input_path (str): Path to the input raster.
-        output_path (str): Path to the output raster.
+        output_path (str): Path to the output COG file.
         geom (Polygon or MultiPolygon): Cropping geometry in raster CRS.
         geom_crs (str or CRS): CRS of the geometry.
 
-    Raises:
-        subprocess.CalledProcessError: If both GDAL.Warp and gdalwarp
-            CLI fallback fail.
+    Returns:
+        None
     """
-    
 
-    # create geojson in EPSG:4326 (so GDAL reads as lat/lon)
-    geojson_path = geom_to_geojson_path(step_num, total_steps, geom, geom_crs)
+    t0 = step("Cropping (streaming mode)...", step_num, total_steps)
 
-    # build WarpOptions instead of passing a long string (safer)
-    block_size_output = 512 #Sets the tile width and height in pixels. Must be divisible by 16. https://gdal.org/drivers/raster/cog.html#general-creation-options
-    warp_opts = gdal.WarpOptions(
-        format="COG",
-        cutlineDSName=geojson_path,
-        cropToCutline=True,
-        dstAlpha=False,
-        creationOptions=["COG=YES", "BIGTIFF=YES", "COMPRESS=DEFLATE", f"BLOCKSIZE={block_size_output}", f"NUM_THREADS={num_workers}"],
-        warpOptions=["OPTIMIZE_SIZE=TRUE"],
-        multithread=True
-    )
+    tmp_tif = output_path.replace(".tif", "_tmp.tif")
 
+    with rasterio.Env(GDAL_NUM_THREADS="ALL_CPUS"):
 
-    t0 = step("Cropping with GDAL Warp...", step_num+1, total_steps)
-    # perform warp
-    try:
-        gdal.Warp(destNameOrDestDS=output_path, srcDSOrSrcDSTab=input_path, options=warp_opts)
-    except Exception as e:
-        # try using subprocess gdalwarp as fallback (older GDAL APIs)
-        print(f"{YELLOW}GDAL.Warp failed, trying gdalwarp CLI fallback: {e}{RESET}")
-        cmd = [
-            "gdalwarp",
-            "-cutline", geojson_path,
-            "-crop_to_cutline",
-            "-of", "COG",
-            "-co", f"BLOCKSIZE={block_size_output}",
-            "-co", "COMPRESS=DEFLATE",        
-            "-co", "BIGTIFF=YES",
-            "-co", f"NUM_THREADS={num_workers}",
-            input_path,
-            output_path
-        ]
-        subprocess.run(cmd, check=True)
+        with rasterio.open(input_path) as src:
 
-    # remove geojson
-    try:
-        os.remove(geojson_path)
-    except Exception:
-        pass
+            geom_proj = reproject_geom(geom, geom_crs, src.crs)
+            geojson_geom = [mapping(geom_proj)]
+
+            profile = src.profile.copy()
+            profile.update({
+                "tiled": True,
+                "blockxsize": 256,
+                "blockysize": 256,
+                "compress": "DEFLATE",
+                "predictor": 2
+            })
+
+            with rasterio.open(tmp_tif, "w", **profile) as dst:
+
+                for ji, window in src.block_windows(1):
+
+                    mask_block = geometry_mask(
+                        geojson_geom,
+                        transform=src.window_transform(window),
+                        invert=True,
+                        out_shape=(window.height, window.width)
+                    )
+
+                    if not mask_block.any():
+                        continue
+
+                    data = src.read(window=window)
+                    data[:, ~mask_block] = 0
+
+                    dst.write(data, window=window)
 
     end(t0)
 
+    # ---------------------------------------
+    # Convert to true COG
+    # ---------------------------------------
+    t1 = step("Generating Cloud Optimized GeoTIFF (COG)...", step_num + 1, total_steps)
+
+    rio_copy(
+        tmp_tif,
+        output_path,
+        driver="COG",
+        compress="DEFLATE",
+        blocksize=256,
+        overview_resampling="nearest",
+        NUM_THREADS="ALL_CPUS"
+    )
+
+    # Remove temporary file
+    try:
+        os.remove(tmp_tif)
+    except Exception:
+        pass
+
+    end(t1)
 
 
 # MAIN PIPELINE
@@ -517,7 +463,7 @@ def crop_mosaic_by_polygon(input_file, output_file, threshold):
       2. Computes a negative buffer.
       3. Applies a convex hull.
       4. Validate the convex hull.
-      5. Crops the mosaic using GDAL Warp.
+      5. Crops the mosaic using RasterIO.
 
     Args:
         input_file (str): Path to the input mosaic.
@@ -549,13 +495,12 @@ def crop_mosaic_by_polygon(input_file, output_file, threshold):
     hull = ensure_valid_geometry(hull)
     end(t0)
 
-    # Step 5 – crop (write geojson in EPSG:4326 so GDAL transforms correctly)
+    # Step 5 and 6 – crop and covert to COG
     crop_with_mask(5, total_steps, input_file, output_file, hull, raster_crs)
 
     print(f"{GREEN}\nMosaic cropped successfully!\nSaved at: {output_file}{RESET}")
 
     end(total_start)
-
 
 
 # CLI

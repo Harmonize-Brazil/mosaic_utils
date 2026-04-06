@@ -11,27 +11,40 @@ name = "mosaic_utils"
 dynamic = ["version"]
 description = "Utilities for processing drone mosaics."
 readme = "README.rst"
+requires-python = ">=3.10"
 
 authors = [
     { name = "Marcos Rodrigues", email = "marcos.mlr@gmail.com" }
 ]
 
-classifiers = [
-  "Programming Language :: Python :: 3",
-  "Operating System :: POSIX :: Linux",
+license = { text = "GNU General Public License v3" }
+
+keywords = [
+    "gis",
+    "geospatial",
+    "raster",
+    "drone",
+    "mosaic",
+    "cog",
 ]
 
-license = { text = "GNU General Public License v3" }
-requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Topic :: Scientific/Engineering :: GIS",
+]
 
 dependencies = [
-    "rasterio",
-    "shapely",
-    "numpy",
-    "geopandas",
+    "rasterio>=1.3",
+    "shapely>=2.0",
+    "numpy>=1.23",
+    "geopandas>=0.13",
+    "pyproj>=3.5",
 ]
 
-# Extras Dependencies
+# Optional dependencies
 [project.optional-dependencies]
 docs = [
     "Sphinx>=7.0",
@@ -39,19 +52,26 @@ docs = [
     "sphinx-copybutton",
     "sphinx-tabs",
 ]
-all = ["mosaic_utils[docs]"]
-## End extras dependencies
+dev = [
+    "pytest",
+    "black",
+    "ruff",
+]
+all = ["mosaic_utils[docs,dev]"]
 
+# CLI entry point
+[project.scripts]
+crop-mosaic = "mosaic_utils.crop_mosaic:main"
+
+# Package discovery
 [tool.setuptools]
 packages = { find = {} }
 
 [tool.setuptools.package-data]
 "mosaic_utils" = ["data/*", "*.yaml", "*.json"]
 
+# Versioning from git tags
 [tool.setuptools-git-versioning]
 enabled = true
 dev_template = "{tag}.dev{ccount}"
 dirty_template = "{tag}.dev{ccount}"
-
-[project.scripts]
-crop-mosaic = "mosaic_utils.crop_mosaic:main"
