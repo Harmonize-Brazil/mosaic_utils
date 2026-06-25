@@ -440,6 +440,7 @@ def crop_with_mask(step_num, total_steps, input_path, output_path, geom, geom_cr
         driver="COG",
         compress="DEFLATE",
         blocksize=256,
+        BIGTIFF="IF_SAFER",
         overview_resampling="nearest",
         NUM_THREADS="ALL_CPUS"
     )
@@ -514,6 +515,11 @@ def main():
     Returns:
         None
     """
+    try:
+        from colorama import just_fix_windows_console
+        just_fix_windows_console()
+    except ImportError:
+        pass
     parser = argparse.ArgumentParser(description="Crop mosaic tool")
     parser.add_argument("--mosaic_image", required=True)
     parser.add_argument("--threshold_area", type=float, required=True)

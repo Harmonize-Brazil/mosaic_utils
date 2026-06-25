@@ -42,6 +42,7 @@ dependencies = [
     "numpy>=1.23",
     "geopandas>=0.13",
     "pyproj>=3.5",
+    "colorama>=0.4.6; platform_system=='Windows'",
 ]
 
 # Optional dependencies
