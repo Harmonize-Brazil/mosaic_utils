@@ -43,6 +43,7 @@ dependencies = [
     "geopandas>=0.13",
     "pyproj>=3.5",
     "colorama>=0.4.6; platform_system=='Windows'",
+    "opencv-python-headless>=4.10",
 ]
 
 # Optional dependencies

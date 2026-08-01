@@ -5,6 +5,9 @@
 
 import os
 import sys
+from importlib.metadata import version as pkg_version, PackageNotFoundError
+
+
 
 # Add project root directory to PYTHONPATH
 sys.path.insert(0, os.path.abspath('../..'))
@@ -13,9 +16,13 @@ sys.path.insert(0, os.path.abspath('../..'))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'mosaic_utils'
-copyright = "2025, HARMONIZE/INPE"
+copyright = "2026, HARMONIZE/INPE"
 author = 'Marcos Rodrigues'
-release = '0.1.0'
+try:
+    release = pkg_version("mosaic_utils") # using setuptools-git-versioning
+except PackageNotFoundError:
+    release = "development"
+version = release
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

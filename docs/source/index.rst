@@ -1,32 +1,51 @@
-
 .. image:: _static/mosaic_utils_logo.png
    :width: 220px
    :align: right
 
-Welcome to **mosaic_utils'** documentantion!
+Welcome to **mosaic_utils'** documentation
 ============================================
 
-**mosaic_utils** is a Python package that provides a collection of algorithms and helper functions for processing mosaics generated from Unmanned Aerial Vehicle (UAV) imagery. It includes tools for handling geospatial metadata, managing sensor-derived information, and performing postprocessing steps commonly required in drone-based mapping workflows.
+**mosaic_utils** provides utilities for post-processing orthomosaics
+generated from UAV imagery.
 
-License
-=======
+Its main application, ``crop-mosaic``, automatically removes invalid
+mosaic borders while preserving all raster metadata.
 
-.. admonition::
-    Copyright (C) 2025 HARMONIZE/INPE.
+Features
+========
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-    
+* Automatic validity mask detection
+* RGB, multispectral and thermal support
+* Memory-efficient streaming processing
+* Metadata preservation
+* Pure Rasterio/OpenCV implementation
+* Cross-platform (Linux and Windows)
+
+
+Contents
+========
+
 .. toctree::
    :maxdepth: 2
-   :caption: Contents
 
    installation
    usage
+   crop_mosaic
+   examples
    api
    authors
    changelog
 
 
+
+
+License
+=======
+
+.. admonition::
+    Copyright (C) 2026 HARMONIZE/INPE.
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.

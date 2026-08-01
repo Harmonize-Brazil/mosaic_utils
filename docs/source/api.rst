@@ -9,19 +9,18 @@ API Reference
 Submodules
 ----------
 
-arghelper
----------
+crop_mosaic
+~~~~~~~~~~~
 
-.. automodule:: mosaic_utils.arghelper
+.. automodule:: mosaic_utils.crop_mosaic
    :members:
    :undoc-members:
    :show-inheritance:
 
+arghelper
+~~~~~~~~~
 
-crop_mosaic
------------
-
-.. automodule:: mosaic_utils.crop_mosaic
+.. automodule:: mosaic_utils.arghelper
    :members:
    :undoc-members:
    :show-inheritance:

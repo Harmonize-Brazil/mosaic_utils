@@ -1,6 +1,6 @@
 ..
     This file is part of Python mosaic_utils tool.
-    Copyright (C) 2025 HARMONIZE/INPE.
+    Copyright (C) 2026 HARMONIZE/INPE.
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,49 +36,75 @@
         :target: https://github.com/Harmonize-Brazil/mosaic_utils/releases/latest
         :alt: Release
 
+
 About
 =====
 
-**mosaic_utils** is a Python package that provides a collection of algorithms and helper functions for processing mosaics generated from drone imagery. It includes tools for handling geospatial metadata, managing sensor-derived information, and performing postprocessing steps commonly required in drone-based mapping workflows.
+**mosaic_utils** is a Python package providing utilities for processing
+orthomosaics generated from drone imagery.
 
+Its main tool, **crop-mosaic**, automatically removes invalid mosaic borders
+while preserving all raster bands, georeferencing information and metadata.
 
-Documentation
-=============
+Features
+========
 
-Full documentation is available at:
+* Automatic removal of invalid mosaic borders.
+* Supports RGB, multispectral and thermal mosaics.
+* Automatic validity mask determination from:
 
-`https://mosaic-utils.readthedocs.io/en/latest/ <https://mosaic-utils.readthedocs.io/en/latest/>`_
+  * Alpha band;
+  * GDAL dataset mask;
+  * User-defined pixel threshold.
 
-Installation
-============
+* Outer polygon extraction from the validity mask.
+* Inward (negative) buffer computation for robust cropping.
+* Preservation of raster metadata, CRS and affine transform.
+* Command-line interface suitable for batch processing.
 
-For full installation instructions, please refer to:
+Crop Mosaic Pipeline
+====================
 
-`docs/source/installation.rst <docs/source/installation.rst>`_
+The ``crop-mosaic`` command automatically derives a cropping geometry
+from the raster validity mask and removes invalid mosaic borders.
 
-Usage
-=====
-
-Examples, command references and workflows are available in:
-
-`docs/source/usage.rst <docs/source/usage.rst>`_
+.. image:: docs/source/_static/crop_pipeline.png
+   :alt: Crop Mosaic processing pipeline
+   :align: center
+   :width: 100%
 
 Quick Start
------------
+===========
 
-Run ``crop-mosaic`` to crop a raster using the convex hull of a negative buffer:
+Crop a mosaic using the default parameters:
 
 .. code-block:: shell
 
-    crop-mosaic --mosaic_image /path/to/mosaic.tif --threshold_area 0.005
+    crop-mosaic \
+        --mosaic_image mosaic.tif \
+        --threshold_area 0.005
 
-Or check all available options:
+Display all available options:
 
 .. code-block:: shell
 
     crop-mosaic --help
 
+Documentation
+=============
+
+The complete documentation is available at:
+
+`https://mosaic-utils.readthedocs.io/en/latest/ <https://mosaic-utils.readthedocs.io/en/latest/>`_
+
+
+
+Additional documentation can be found in:
+
+* ``docs/source/installation.rst`` — installation instructions.
+* ``docs/source/usage.rst`` — command-line usage and examples.
+
 License
 =======
 
-Copyright (C) 2025 INPE/HARMONIZE.
+Copyright (C) 2026 INPE/HARMONIZE.

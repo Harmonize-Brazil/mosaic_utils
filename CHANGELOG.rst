@@ -3,8 +3,19 @@ Changelog
 
 (unreleased)
 ------------
+*
 
-* 
+
+0.3.0 (2026-07-31)
+------------------
+
+* Enable support for BigTIFFs and Windows color terminal
+* Replaced convex hull approach with OpenCV contour extraction.
+* Improved outer polygon preservation.
+* Added validity mask auto-detection.
+* Added RGB, multispectral and thermal workflows.
+* Improved documentation with processing pipeline illustrations.
+* Simplified installation. 
 
 0.2.0 (2026-04-06)
 ------------------
